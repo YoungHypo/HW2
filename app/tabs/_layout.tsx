@@ -1,9 +1,12 @@
 import { Tabs } from 'expo-router';
-/* @tutinfo Import <CODEIonicons</CODE> icon set.*/
+import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-
 export default function TabLayout() {
+  const router = useRouter();
+  const email = router.params; 
+  console.log('test tab: ')
+  console.log(email)
   return (
     <Tabs
       screenOptions={{

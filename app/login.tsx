@@ -1,9 +1,8 @@
-import {Text, TextInput, View, StyleSheet, Button, ScrollView} from 'react-native';
-import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import {Text, TextInput, View, StyleSheet, ScrollView, TouchableOpacity} from 'react-native';
 import { useState, useEffect } from 'react';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import auth from '@react-native-firebase/auth';
+import { useRouter } from 'expo-router';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCVLLKMev1u0QoWW2OOHWyIi061GZl2Goo",
@@ -17,7 +16,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-const AuthScreen = ({email, setEmail, password, setPassword, isLoggingIn, setIsLoggingIn, handleAuthentication, handleGoogleButtonPress}) => {
+const AuthScreen = ({email, setEmail, password, setPassword, isLoggingIn, setIsLoggingIn, handleEmailAuthentication, handleGoogleButtonPress}) => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Welcome to Sublet!</Text>
@@ -39,11 +38,9 @@ const AuthScreen = ({email, setEmail, password, setPassword, isLoggingIn, setIsL
         />
 
         <View style={styles.buttonContainer}>
-            <Button
-                title={isLoggingIn ? 'Sign In' : 'Sign Up'}
-                onPress={handleAuthentication} 
-                color="#3678da"
-            />
+            <TouchableOpacity style={styles.button} onPress={handleEmailAuthentication}>
+            <Text style={styles.buttonText}>{isLoggingIn ? 'Sign In' : 'Sign Up'}</Text>
+            </TouchableOpacity>
         </View>
 
         <View style={styles.bottomContainer}>
@@ -52,86 +49,93 @@ const AuthScreen = ({email, setEmail, password, setPassword, isLoggingIn, setIsL
             </Text>
         </View>
 
-        <View style={styles.bottomContainer}>
-            <Button
-                title="Sign in with Google"
-                onPress={handleGoogleButtonPress}
-                color="#3678da"
-            />
+        <View style={styles.buttonContainer}>
+            <TouchableOpacity style={styles.button} onPress={handleGoogleButtonPress}>
+                <Text style={styles.buttonText}>Using Google</Text>
+            </TouchableOpacity>
         </View>
     </View>
   );
 }
 
 export default function LoginScreen() {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [isLoggingIn, setIsLoggingIn] = useState(true);
-    const [user, setUser] = useState(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(true);
+  const [user, setUser] = useState(null);
 
-    const _auth = getAuth(app);
-    useEffect(() => {
-        const unsubscribe = _auth.onAuthStateChanged(user => setUser(user));
-        return unsubscribe;
-    }, [_auth]);
+  const router = useRouter();
+  const auth = getAuth(app);
+  const provider = new GoogleAuthProvider();
 
-    const handleGoogleButtonPress = async () => {
-        // Check if your device supports Google Play
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-        // Get the users ID token
-        const { idToken, user } = await GoogleSignin.signIn();
-        console.log(user);
-    
-        // Create a Google credential with the token
-        const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-    
-        // Sign-in the user with the credential
-        return auth().signInWithCredential(googleCredential);
+  const handleGoogleButtonPress = async () => {
+    await signInWithPopup(auth, provider)
+      .then((result) => {
+        const user = result.user;
+        setUser(user);
+        console.log('Signed in with Google');
+      })
+      .catch((error) => {
+          console.error(error.message);
+      }
+    );    
+  }
+
+  const handleEmailAuthentication = async () => {
+    try {
+      if(!user){
+        if (isLoggingIn) { // Sign in
+          await signInWithEmailAndPassword(auth, email, password);
+          setUser(auth.currentUser);
+          console.log('Signed in');
+        }
+        else { // Sign up
+          await createUserWithEmailAndPassword(auth, email, password);
+          setUser(auth.currentUser);
+          console.log('Signed up');
+        }
+      }
     }
+    catch (error) {
+      console.error(error.message);
+    }
+  };
 
-    const handleAuthentication = async () => {
-        try {
-            if (user) {
-                console.log('Signing out');
-                await signOut(_auth);
-            }
-            else {
-                if (isLoggingIn) { // Sign in
-                    await signInWithEmailAndPassword(_auth, email, password);
-                    console.log('Signed in');
-                }
-                else { // Sign up
-                    await createUserWithEmailAndPassword(_auth, email, password);
-                    console.log('Signed up');
-                }
-            }
-        }
-        catch (error) {
-            console.error(error.message);
-        }
-    };
+  useEffect(() => {
+    if(user){
+      signOut(auth);
+    }
+  }, [router]);
 
-    return (
-        <ScrollView contentContainerStyle={styles.container}>
-            {user ? (
-                <View style={styles.authContainer}>
-                    <Text style={styles.title}>Welcome, {user.email}!</Text>
-                    <Button title="Sign Out" onPress={handleAuthentication} />
-                </View>
-            ) : (
-                <AuthScreen
-                    email={email}
-                    setEmail={setEmail}
-                    password={password}
-                    setPassword={setPassword}
-                    isLoggingIn={isLoggingIn}
-                    setIsLoggingIn={setIsLoggingIn}
-                    handleAuthentication={handleAuthentication}
-                    handleGoogleButtonPress={handleGoogleButtonPress}
-                />
-            )}
-        </ScrollView>
-    );
+  useEffect(() => {
+    if(user){
+      router.push({
+        pathname: '/tabs',
+        params: { email }
+      });
+  }
+  }, [user]);
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      {!user ? (
+        <AuthScreen
+        email={email}
+        setEmail={setEmail}
+        password={password}
+        setPassword={setPassword}
+        isLoggingIn={isLoggingIn}
+        setIsLoggingIn={setIsLoggingIn}
+        handleEmailAuthentication={handleEmailAuthentication}
+        handleGoogleButtonPress={handleGoogleButtonPress}
+      />
+    ) : (
+      <View style={styles.container}>
+        <Text style={styles.title}>Loading</Text>
+      </View>
+  )}
+  </ScrollView>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -144,7 +148,6 @@ const styles = StyleSheet.create({
   authContainer: {
     width: '80%',
     maxWidth: 400,
-    backgroundColor: '#fff',
     padding: 16,
     borderRadius: 8,
     elevation: 3,
@@ -153,6 +156,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     marginBottom: 24,
     textAlign: 'center',
+  },
+  button: {
+    backgroundColor: '#3678da',
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#fff',
+    padding: 8,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
   },
   input: {
     height: 40,
@@ -164,10 +179,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   buttonContainer: {
-    marginBottom: 16,
+    marginTop: 8,
+    marginBottom: 12,
   },
   bottomContainer: {
     marginTop: 20,
+    marginBottom: 30,
   },
   toggleText: {
     color: '#3678da',
